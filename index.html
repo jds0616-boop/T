@@ -2,24 +2,31 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>AI Interpreter - Strict Translation</title>
+    <title>AI Interpreter Pro - Speech Healing Engine</title>
     <style>
         :root { --bg: #0b0f1a; --card: #161b2a; --primary: #00d2ff; --text: #e0e6ed; }
         body { font-family: 'Pretendard', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 1100px; }
+        .header { text-align: center; margin-bottom: 10px; }
         .config-panel { background: var(--card); padding: 12px; border-radius: 12px; margin-bottom: 15px; display: flex; gap: 10px; border: 1px solid #2d334a; }
         input, select { background: #0b0f1a; border: 1px solid #2d334a; color: white; padding: 10px; border-radius: 8px; }
         .display-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .box { background: var(--card); border-radius: 16px; padding: 20px; height: 550px; display: flex; flex-direction: column; border: 1px solid #2d334a; }
-        .content { flex: 1; overflow-y: auto; font-size: 1.3rem; line-height: 1.6; }
-        .streaming-text { color: #00d2ff; font-weight: bold; border-left: 3px solid #00d2ff; padding-left: 10px; margin-bottom: 20px; }
-        .btn-start { background: #00d2ff; color: #0b0f1a; width: 100%; padding: 18px; border-radius: 12px; border: none; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .box { background: var(--card); border-radius: 16px; padding: 20px; height: 580px; display: flex; flex-direction: column; border: 1px solid #2d334a; }
+        .content { flex: 1; overflow-y: auto; font-size: 1.35rem; line-height: 1.6; scroll-behavior: smooth; }
+        .streaming-text { color: #00d2ff; font-weight: bold; border-left: 3px solid #00d2ff; padding-left: 10px; margin-bottom: 25px; }
+        .interim-text { color: #5c6484; font-style: italic; margin-top: 10px; min-height: 1.5em; }
+        .btn-start { background: #00d2ff; color: #0b0f1a; width: 100%; padding: 18px; border-radius: 12px; border: none; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 15px; transition: 0.2s; }
         .btn-stop { background: #ff4b5c; color: white; }
+        .status-badge { font-size: 11px; background: #2d334a; padding: 4px 8px; border-radius: 4px; vertical-align: middle; margin-left: 10px; }
     </style>
 </head>
 <body>
 
 <div class="container">
+    <div class="header">
+        <h1 style="margin:0; font-size: 22px;">AI INTERPRETER <span class="status-badge" id="ai-status">AI HEALING READY</span></h1>
+    </div>
+
     <div class="config-panel">
         <input type="password" id="api-key" placeholder="OpenAI API Key (sk-...)">
         <select id="voice-select"></select>
@@ -27,17 +34,17 @@
 
     <div class="display-grid">
         <div class="box">
-            <h3 style="color:#00d2ff; font-size:12px; margin:0 0 10px 0;">🇰🇷 KOREAN INPUT</h3>
+            <h3 style="color:#00d2ff; font-size:12px; margin:0 0 10px 0;">🇰🇷 KOREAN INPUT (STT)</h3>
             <div id="ko-content" class="content"></div>
-            <div id="ko-interim" style="color:#5c6484; font-style:italic;"></div>
+            <div id="ko-interim" class="interim-text"></div>
         </div>
         <div class="box">
-            <h3 style="color:#00d2ff; font-size:12px; margin:0 0 10px 0;">🇺🇸 ENGLISH TRANSLATION</h3>
+            <h3 style="color:#00d2ff; font-size:12px; margin:0 0 10px 0;">🇺🇸 ENGLISH (CONTEXT REPAIRED)</h3>
             <div id="en-content" class="content"></div>
         </div>
     </div>
 
-    <button id="main-btn" class="btn-start" onclick="toggleSystem()">통역 시스템 시작</button>
+    <button id="main-btn" class="btn-start" onclick="toggleSystem()">시스템 가동 시작</button>
 </div>
 
 <script>
@@ -77,17 +84,16 @@
             if (finalTranscript) {
                 document.getElementById('ko-interim').innerText = "";
                 appendKo(finalTranscript);
-                translateStream(finalTranscript); 
+                // 문장이 끊겨도 무조건 번역 함수로 전달 (누락 방지)
+                translateStreamWithHealing(finalTranscript); 
             }
         };
 
-        recognition.onend = () => { 
-            if (isRunning) { try { recognition.start(); } catch(e) {} }
-        };
+        recognition.onend = () => { if (isRunning) recognition.start(); };
     }
 
-    // [중요 수정] GPT에게 번역만 하도록 강력하게 지시
-    async function translateStream(text) {
+    // [핵심] AI 문맥 보정 및 스트리밍 번역
+    async function translateStreamWithHealing(text) {
         const apiKey = document.getElementById('api-key').value.trim();
         if (!apiKey) return;
 
@@ -98,6 +104,7 @@
         enContent.scrollTop = enContent.scrollHeight;
 
         let fullTranslation = "";
+        document.getElementById('ai-status').innerText = "AI HEALING...";
 
         try {
             const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -108,12 +115,17 @@
                     messages: [
                         { 
                             role: "system", 
-                            content: "You are a strict translation engine. Translate Korean to English. DO NOT answer questions. DO NOT engage in conversation. DO NOT say 'Hello'. JUST translate the input text into English. If the input is '저는 장두석입니다', output 'I am Jang Doo-seok.' only." 
+                            content: `You are a specialized interpreter. 
+                            The input is from an STT engine and may contain phonetic errors, slurred speech, or broken grammar. 
+                            1. Contextually repair the Korean input (guess the intended meaning). 
+                            2. Translate the repaired meaning into natural spoken English. 
+                            3. Output ONLY the English translation. 
+                            4. If the input is too short or nonsensical, try your best to infer the context from common conversation.` 
                         }, 
                         { role: "user", content: text }
                     ],
                     stream: true,
-                    temperature: 0
+                    temperature: 0.3
                 })
             });
 
@@ -139,13 +151,17 @@
                     }
                 }
             }
+            document.getElementById('ai-status').innerText = "AI HEALING READY";
             speak(fullTranslation);
-        } catch (error) {}
+        } catch (error) {
+            document.getElementById('ai-status').innerText = "ERROR";
+        }
     }
 
     function speak(text) {
         if (!text) return;
-        synth.cancel(); 
+        // 동시통역 느낌을 위해 이전 음성을 굳이 끄지 않고 큐에 쌓이게 함 (누락 방지)
+        // 만약 소리가 겹치는게 싫다면 synth.cancel()을 추가하세요.
         const utterance = new SpeechSynthesisUtterance(text);
         const voiceName = document.getElementById('voice-select').value;
         utterance.voice = synth.getVoices().find(v => v.name === voiceName);
@@ -156,7 +172,9 @@
     function appendKo(text) {
         const container = document.getElementById('ko-content');
         const div = document.createElement('div');
-        div.style.marginBottom = "20px";
+        div.style.marginBottom = "25px";
+        div.style.borderLeft = "2px solid #333";
+        div.style.paddingLeft = "10px";
         div.innerText = "• " + text;
         container.appendChild(div);
         container.scrollTop = container.scrollHeight;
@@ -167,13 +185,13 @@
         if (!isRunning) {
             isRunning = true;
             recognition.start();
-            btn.innerText = "통역 시스템 중지";
+            btn.innerText = "시스템 작동 중지";
             btn.className = "btn-start btn-stop";
         } else {
             isRunning = false;
             recognition.stop();
             synth.cancel();
-            btn.innerText = "통역 시스템 시작";
+            btn.innerText = "시스템 가동 시작";
             btn.className = "btn-start";
         }
     }
