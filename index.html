@@ -2,67 +2,88 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>AI Aviation Interpreter - Professional Mode</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Aviation Interpreter Pro - Final</title>
+    <!-- PDF 분석 라이브러리 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
-        :root { --bg: #0b1120; --card: #1e293b; --primary: #38bdf8; --text: #f8fafc; }
-        body { font-family: 'Pretendard', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 100%; max-width: 1200px; }
+        :root { --bg: #0b1120; --card: #161b2a; --primary: #00d2ff; --success: #10b981; --text: #e0e6ed; }
+        body { font-family: 'Pretendard', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 1200px; display: flex; flex-direction: column; gap: 15px; }
         
-        /* 설정 섹션 */
-        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
-        .panel { background: var(--card); border: 1px solid #334155; padding: 15px; border-radius: 12px; }
-        .panel h4 { margin: 0 0 10px 0; font-size: 13px; color: var(--primary); }
+        /* 상단 설정 패널 */
+        .top-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .panel { background: var(--card); border: 1px solid #2d334a; padding: 15px; border-radius: 12px; }
+        .panel h4 { margin: 0 0 10px 0; font-size: 12px; color: var(--primary); text-transform: uppercase; }
         
-        textarea { width: 100%; background: #0b1120; color: #10b981; border: 1px solid #334155; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 12px; box-sizing: border-box; }
-        input, select { background: #0b1120; border: 1px solid #334155; color: white; padding: 10px; border-radius: 8px; width: 100%; box-sizing: border-box; }
+        input, select, textarea { background: #0b0f1a; border: 1px solid #2d334a; color: white; padding: 10px; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 14px; }
+        textarea { font-family: monospace; resize: none; color: var(--success); }
 
+        /* 메인 통역 창 */
         .display-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .box { background: var(--card); border-radius: 16px; padding: 20px; height: 500px; display: flex; flex-direction: column; border: 1px solid #334155; position: relative; }
-        .content { flex: 1; overflow-y: auto; font-size: 1.4rem; line-height: 1.7; }
-        .streaming-text { color: var(--primary); font-weight: bold; border-left: 3px solid var(--primary); padding-left: 10px; margin-bottom: 25px; }
+        .box { background: var(--card); border-radius: 16px; padding: 20px; height: 550px; display: flex; flex-direction: column; border: 1px solid #2d334a; position: relative; }
+        .box h3 { margin: 0 0 10px 0; font-size: 12px; color: #64748b; }
+        .content { flex: 1; overflow-y: auto; font-size: 1.4rem; line-height: 1.6; scroll-behavior: smooth; }
         
-        .btn-start { background: var(--primary); color: #0b1120; width: 100%; padding: 18px; border-radius: 12px; border: none; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 15px; }
-        .btn-stop { background: #ef4444; color: white; }
+        /* 텍스트 스타일 */
+        .ko-item { margin-bottom: 20px; border-left: 2px solid #334155; padding-left: 10px; }
+        .streaming-text { color: var(--primary); font-weight: bold; border-left: 3px solid var(--primary); padding-left: 10px; margin-bottom: 20px; }
+        .interim-text { color: #5c6484; font-style: italic; font-size: 1.2rem; }
+
+        /* 하단 컨트롤 */
+        .controls { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; width: 100%; }
+        .btn-start { background: var(--primary); color: #0b0f1a; width: 100%; padding: 20px; border-radius: 12px; border: none; font-size: 20px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-start:hover { opacity: 0.9; }
+        .btn-stop { background: #ff4b5c; color: white; }
+
+        /* 마이크 상태등 */
+        .mic-tag { position: absolute; top: 15px; right: 20px; font-size: 11px; font-weight: bold; display: flex; align-items: center; gap: 5px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #444; }
+        .dot.active { background: var(--success); box-shadow: 0 0 10px var(--success); animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="settings-grid">
-        <!-- PDF 업로드 -->
+    <div class="top-panels">
+        <!-- PDF 학습 섹션 -->
         <div class="panel">
-            <h4>📘 교재 학습 (PDF)</h4>
+            <h4>📘 교재 PDF 학습 (단어 보정용)</h4>
             <input type="file" id="pdf-upload" accept=".pdf">
-            <div id="pdf-status" style="font-size:11px; margin-top:5px; color:#94a3b8;">PDF를 업로드하세요.</div>
+            <div id="pdf-status" style="font-size:11px; margin-top:5px; color:#64748b;">PDF를 업로드하면 AI가 용어를 학습합니다.</div>
         </div>
-        <!-- 발음 교정 사전 -->
+        <!-- 발음 사전 섹션 -->
         <div class="panel">
             <h4>🎙️ 전문 용어 발음 사전 (단어:발음)</h4>
-            <textarea id="pronunciation-map" rows="3" placeholder="ACARS:ay-karz&#10;ATN:A-T-N&#10;VDL:V-D-L">ACARS:ay-karz
+            <textarea id="pronunciation-map" rows="3">ACARS:ay-karz
 AOC:A-O-C
-ATN:A-T-N</textarea>
+ATN:A-T-N
+VDL:V-D-L</textarea>
         </div>
     </div>
 
-    <div class="config-panel" style="display:flex; gap:10px; margin-bottom:15px;">
+    <div class="panel" style="display:flex; gap:10px; align-items:center;">
         <input type="password" id="api-key" placeholder="OpenAI API Key (sk-...)">
-        <select id="voice-select"></select>
+        <select id="voice-select" style="max-width:250px;"></select>
     </div>
 
     <div class="display-grid">
         <div class="box">
-            <h3 style="font-size:11px; color:#64748b; margin:0 0 10px 0;">🇰🇷 KOREAN INPUT</h3>
+            <div class="mic-tag"><div id="mic-dot" class="dot"></div><span id="mic-text">MIC OFF</span></div>
+            <h3>🇰🇷 KOREAN INPUT</h3>
             <div id="ko-content" class="content"></div>
-            <div id="ko-interim" style="color:#64748b; font-style:italic;"></div>
+            <div id="ko-interim" class="interim-text"></div>
         </div>
         <div class="box">
-            <h3 style="font-size:11px; color:#64748b; margin:0 0 10px 0;">🇺🇸 ENGLISH TRANSLATION</h3>
+            <h3>🇺🇸 ENGLISH TRANSLATION (STREAMING)</h3>
             <div id="en-content" class="content"></div>
         </div>
     </div>
 
-    <button id="main-btn" class="btn-start" onclick="toggleSystem()">시스템 가동 시작</button>
+    <div class="controls">
+        <button id="main-btn" class="btn-start" onclick="toggleSystem()">시스템 가동 시작</button>
+    </div>
 </div>
 
 <script>
@@ -72,7 +93,7 @@ ATN:A-T-N</textarea>
     let lastResultTime = Date.now();
     const synth = window.speechSynthesis;
 
-    // 1. PDF 분석
+    // 1. PDF 분석 설정
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     document.getElementById('pdf-upload').addEventListener('change', async (e) => {
         const file = e.target.files[0];
@@ -83,107 +104,35 @@ ATN:A-T-N</textarea>
             const typedarray = new Uint8Array(this.result);
             const pdf = await pdfjsLib.getDocument(typedarray).promise;
             let extractedText = "";
-            for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+            for (let i = 1; i <= Math.min(pdf.numPages, 50); i++) {
                 const page = await pdf.getPage(i);
                 const content = await page.getTextContent();
                 extractedText += content.items.map(item => item.str).join(" ") + " ";
             }
-            pdfContext = extractedText.substring(0, 8000);
-            document.getElementById('pdf-status').innerText = "✅ 학습 완료!";
+            pdfContext = extractedText.substring(0, 12000);
+            document.getElementById('pdf-status').innerText = `✅ 학습 완료! (${pdf.numPages}페이지)`;
         };
         reader.readAsArrayBuffer(file);
     });
 
-    // 2. 음성 설정
+    // 2. 음성 목록 로드
     function loadVoices() {
         const voices = synth.getVoices().filter(v => v.lang.includes('en'));
-        document.getElementById('voice-select').innerHTML = voices.map(v => `<option value="${v.name}">${v.name}</option>`).join('');
+        const select = document.getElementById('voice-select');
+        select.innerHTML = voices.map(v => `<option value="${v.name}">${v.name}</option>`).join('');
     }
     window.speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
 
-    // 3. 통역 핵심 로직
-    async function translateStream(text) {
-        const apiKey = document.getElementById('api-key').value.trim();
-        if (!apiKey) return;
-
-        const enContent = document.getElementById('en-content');
-        const currentEnDiv = document.createElement('div');
-        currentEnDiv.className = "streaming-text";
-        enContent.appendChild(currentEnDiv);
-
-        let fullTranslation = "";
-        
-        // 용어 사전을 프롬프트에 포함
-        const glossary = document.getElementById('pronunciation-map').value;
-
-        try {
-            const response = await fetch("https://api.openai.com/v1/chat/completions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-                body: JSON.stringify({
-                    model: "gpt-4o-mini",
-                    messages: [
-                        { role: "system", content: `Aviation Interpreter. Use this context: ${pdfContext}. Use this glossary: ${glossary}. Translate Korean to natural aviation English. If the STT is 'Hey cars', it's likely 'ACARS'. Correct it.` },
-                        { role: "user", content: text }
-                    ],
-                    stream: true,
-                    temperature: 0.1
-                })
-            });
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder("utf-8");
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                const chunk = decoder.decode(value);
-                const lines = chunk.split("\n");
-                for (const line of lines) {
-                    if (line.startsWith("data: ") && line !== "data: [DONE]") {
-                        try {
-                            const content = JSON.parse(line.substring(6)).choices[0].delta.content;
-                            if (content) {
-                                fullTranslation += content;
-                                currentEnDiv.innerText = "→ " + fullTranslation;
-                                enContent.scrollTop = enContent.scrollHeight;
-                            }
-                        } catch(e) {}
-                    }
-                }
-            }
-            // 발음 교정 사전을 적용하여 말하기
-            speakCorrected(fullTranslation);
-        } catch (error) {}
-    }
-
-    // 4. 발음 교정 말하기 함수
-    function speakCorrected(text) {
-        let spokenText = text;
-        const mapText = document.getElementById('pronunciation-map').value;
-        const lines = mapText.split('\n');
-
-        // 사전에 등록된 단어를 발음용 단어로 치환 (예: ACARS -> ay-karz)
-        lines.forEach(line => {
-            const [word, phonetic] = line.split(':');
-            if (word && phonetic) {
-                const regex = new RegExp(`\\b${word.trim()}\\b`, 'gi');
-                spokenText = spokenText.replace(regex, phonetic.trim());
-            }
-        });
-
-        const utterance = new SpeechSynthesisUtterance(spokenText);
-        utterance.voice = synth.getVoices().find(v => v.name === document.getElementById('voice-select').value);
-        utterance.rate = 1.0;
-        synth.speak(utterance);
-    }
-
-    // [시스템 가동/중지]
+    // 3. 음성 인식 초기화
     function initRecognition() {
-        const SpeechRecognition = window.webkitSpeechRecognition || window.Recognition;
+        const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
         recognition = new SpeechRecognition();
         recognition.lang = 'ko-KR';
         recognition.continuous = true;
         recognition.interimResults = true;
+
+        recognition.onstart = () => { updateMicUI(true); lastResultTime = Date.now(); };
         recognition.onresult = (event) => {
             lastResultTime = Date.now();
             let interim = '';
@@ -198,15 +147,118 @@ ATN:A-T-N</textarea>
                 translateStream(final);
             }
         };
-        recognition.onend = () => { if(isRunning) recognition.start(); };
+        recognition.onend = () => {
+            updateMicUI(false);
+            if (isRunning) setTimeout(() => { if(isRunning) try { recognition.start(); } catch(e) {} }, 100);
+        };
+    }
+
+    // 4. 스트리밍 번역 엔진 (엄격한 번역 모드 + 문맥 보정)
+    async function translateStream(text) {
+        const apiKey = document.getElementById('api-key').value.trim();
+        if (!apiKey) return;
+
+        const enContent = document.getElementById('en-content');
+        const currentEnDiv = document.createElement('div');
+        currentEnDiv.className = "streaming-text";
+        enContent.appendChild(currentEnDiv);
+        enContent.scrollTop = enContent.scrollHeight;
+
+        let fullTranslation = "";
+        const glossary = document.getElementById('pronunciation-map').value;
+
+        try {
+            const response = await fetch("https://api.openai.com/v1/chat/completions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: "gpt-4o-mini",
+                    messages: [
+                        { 
+                            role: "system", 
+                            content: `You are a strict minimalist aviation translation engine.
+                            [Context]: ${pdfContext}
+                            [Glossary]: ${glossary}
+                            [Rules]:
+                            1. Translate Korean to English instantly. 
+                            2. Output ONLY the translated result. NO EXPLANATIONS.
+                            3. Use the Context and Glossary to repair STT errors (e.g., 'Hey cars' -> 'ACARS').
+                            4. For short words like '지금', just output 'Now'.` 
+                        },
+                        { role: "user", content: text }
+                    ],
+                    stream: true,
+                    temperature: 0
+                })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value);
+                const lines = chunk.split("\n");
+                for (const line of lines) {
+                    if (line.startsWith("data: ") && line !== "data: [DONE]") {
+                        try {
+                            const payload = JSON.parse(line.substring(6));
+                            const content = payload.choices[0].delta.content;
+                            if (content) {
+                                fullTranslation += content;
+                                currentEnDiv.innerText = "→ " + fullTranslation;
+                                enContent.scrollTop = enContent.scrollHeight;
+                            }
+                        } catch(e) {}
+                    }
+                }
+            }
+            speakCorrected(fullTranslation);
+        } catch (error) { console.error(error); }
+    }
+
+    // 5. 발음 교정 TTS
+    function speakCorrected(text) {
+        let spokenText = text;
+        const lines = document.getElementById('pronunciation-map').value.split('\n');
+        lines.forEach(line => {
+            const [word, phonetic] = line.split(':');
+            if (word && phonetic) {
+                const regex = new RegExp(`\\b${word.trim()}\\b`, 'gi');
+                spokenText = spokenText.replace(regex, phonetic.trim());
+            }
+        });
+
+        const utterance = new SpeechSynthesisUtterance(spokenText);
+        utterance.voice = synth.getVoices().find(v => v.name === document.getElementById('voice-select').value);
+        utterance.rate = 1.1;
+        synth.speak(utterance);
+    }
+
+    // 보조 기능 (마이크 와치독, UI 업데이트)
+    setInterval(() => {
+        if (isRunning && Date.now() - lastResultTime > 6000) {
+            console.log("마이크 무반응 감지 재시작...");
+            try { recognition.stop(); } catch(e) {}
+        }
+    }, 3000);
+
+    function updateMicUI(active) {
+        const dot = document.getElementById('mic-dot');
+        const text = document.getElementById('mic-text');
+        dot.className = active ? "dot active" : "dot";
+        text.innerText = active ? "● LISTENING" : "MIC PAUSED";
+        text.style.color = active ? "#10b981" : "#64748b";
     }
 
     function appendKo(text) {
+        const container = document.getElementById('ko-content');
         const div = document.createElement('div');
-        div.style.marginBottom = "20px";
+        div.className = "ko-item";
         div.innerText = "• " + text;
-        document.getElementById('ko-content').appendChild(div);
-        document.getElementById('ko-content').scrollTop = document.getElementById('ko-content').scrollHeight;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
     }
 
     function toggleSystem() {
@@ -215,7 +267,7 @@ ATN:A-T-N</textarea>
             isRunning = true;
             if(!recognition) initRecognition();
             recognition.start();
-            btn.innerText = "시스템 작동 중지";
+            btn.innerText = "통역 시스템 중지";
             btn.className = "btn-start btn-stop";
         } else {
             isRunning = false;
@@ -225,15 +277,7 @@ ATN:A-T-N</textarea>
             btn.className = "btn-start";
         }
     }
-    
-    // 와치독
-    setInterval(() => {
-        if (isRunning && Date.now() - lastResultTime > 6000) {
-            try { recognition.stop(); } catch(e) {}
-        }
-    }, 3000);
-
-    window.onload = loadVoices;
+    window.onload = initRecognition;
 </script>
 </body>
 </html>
