@@ -2,20 +2,26 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>AI Interpreter - Non-Stop Listening Pro</title>
+    <title>AI Interpreter - PDF Context Learning Pro</title>
+    <!-- PDF.js 라이브러리 로드 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         :root { --bg: #0b1120; --card: #1e293b; --primary: #38bdf8; --text: #f8fafc; }
         body { font-family: 'Pretendard', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 1100px; }
-        .config-panel { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; gap: 10px; border: 1px solid #334155; }
+        .config-panel { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; gap: 10px; border: 1px solid #334155; flex-wrap: wrap; }
         input, select { background: #0b1120; border: 1px solid #334155; color: white; padding: 10px; border-radius: 8px; }
+        
+        /* PDF 업로드 스타일 */
+        .pdf-section { background: rgba(56, 189, 248, 0.1); border: 1px dashed var(--primary); padding: 15px; border-radius: 12px; margin-bottom: 15px; width: 100%; box-sizing: border-box; }
+        #pdf-status { font-size: 13px; color: var(--primary); margin-top: 5px; font-weight: bold; }
+
         .display-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .box { background: var(--card); border-radius: 16px; padding: 20px; height: 600px; display: flex; flex-direction: column; border: 1px solid #334155; position: relative; }
+        .box { background: var(--card); border-radius: 16px; padding: 20px; height: 500px; display: flex; flex-direction: column; border: 1px solid #334155; position: relative; }
         .content { flex: 1; overflow-y: auto; font-size: 1.4rem; line-height: 1.7; scroll-behavior: smooth; }
         .streaming-text { color: var(--primary); font-weight: bold; border-left: 3px solid var(--primary); padding-left: 10px; margin-bottom: 25px; }
         .interim-text { color: #64748b; font-style: italic; margin-top: 10px; height: 1.5em; }
         
-        /* 마이크 상태 표시등 */
         .mic-indicator { position: absolute; top: 15px; right: 20px; font-size: 11px; display: flex; align-items: center; gap: 5px; }
         .dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
         .dot.active { background: #10b981; box-shadow: 0 0 8px #10b981; animation: blink 1s infinite; }
@@ -28,6 +34,13 @@
 <body>
 
 <div class="container">
+    <!-- PDF 업로드 영역 -->
+    <div class="pdf-section">
+        <label style="font-size:14px; font-weight:bold; display:block; margin-bottom:8px;">📘 교재 PDF 학습 (단어 보정용)</label>
+        <input type="file" id="pdf-upload" accept=".pdf" style="font-size: 12px;">
+        <div id="pdf-status">교재를 업로드하면 통역 정확도가 올라갑니다.</div>
+    </div>
+
     <div class="config-panel">
         <input type="password" id="api-key" placeholder="OpenAI API Key (sk-...)">
         <select id="voice-select"></select>
@@ -55,8 +68,39 @@
 <script>
     let recognition;
     let isRunning = false;
+    let pdfContext = ""; // PDF에서 추출된 텍스트 저장용
     let lastResultTime = Date.now();
     const synth = window.speechSynthesis;
+
+    // PDF 텍스트 추출 로직
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    document.getElementById('pdf-upload').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        document.getElementById('pdf-status').innerText = "⏳ 교재 분석 중... 잠시만 기다려주세요.";
+        
+        const reader = new FileReader();
+        reader.onload = async function() {
+            const typedarray = new Uint8Array(this.result);
+            const pdf = await pdfjsLib.getDocument(typedarray).promise;
+            let extractedText = "";
+
+            // 최대 50페이지까지만 분석 (속도 및 토큰 제한 고려)
+            const pages = Math.min(pdf.numPages, 50);
+            for (let i = 1; i <= pages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                const strings = content.items.map(item => item.str);
+                extractedText += strings.join(" ") + " ";
+            }
+
+            pdfContext = extractedText.substring(0, 10000); // 상위 1만자만 컨텍스트로 사용
+            document.getElementById('pdf-status').innerText = `✅ 교재 학습 완료! (${pages}페이지 분석됨)`;
+        };
+        reader.readAsArrayBuffer(file);
+    });
 
     function loadVoices() {
         const voices = synth.getVoices().filter(v => v.lang.includes('en'));
@@ -66,7 +110,6 @@
     window.speechSynthesis.onvoiceschanged = loadVoices;
     loadVoices();
 
-    // [음성 인식 핵심 설정]
     function initRecognition() {
         const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
         recognition = new SpeechRecognition();
@@ -74,52 +117,27 @@
         recognition.continuous = true;
         recognition.interimResults = true;
 
-        recognition.onstart = () => {
-            updateMicStatus(true);
-            lastResultTime = Date.now();
-        };
-
+        recognition.onstart = () => { updateMicStatus(true); lastResultTime = Date.now(); };
         recognition.onresult = (event) => {
-            lastResultTime = Date.now(); // 결과가 들어오면 시간 갱신
+            lastResultTime = Date.now();
             let interimTranscript = '';
             let finalTranscript = '';
-
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    finalTranscript = event.results[i][0].transcript;
-                } else {
-                    interimTranscript += event.results[i][0].transcript;
-                }
+                if (event.results[i].isFinal) finalTranscript = event.results[i][0].transcript;
+                else interimTranscript += event.results[i][0].transcript;
             }
-
             document.getElementById('ko-interim').innerText = interimTranscript;
-
             if (finalTranscript) {
-                document.getElementById('ko-interim').innerText = "";
                 appendKo(finalTranscript);
                 translateStream(finalTranscript); 
             }
         };
-
         recognition.onend = () => {
             updateMicStatus(false);
-            if (isRunning) {
-                console.log("마이크 자동 재시작 시도...");
-                setTimeout(() => { 
-                    if(isRunning) try { recognition.start(); } catch(e) {}
-                }, 100); 
-            }
-        };
-
-        recognition.onerror = (e) => {
-            console.error("인식 에러:", e.error);
-            if (e.error === 'network') {
-                console.log("네트워크 에러 재연결 중...");
-            }
+            if (isRunning) setTimeout(() => { if(isRunning) try { recognition.start(); } catch(e) {} }, 100);
         };
     }
 
-    // [번역 스트리밍]
     async function translateStream(text) {
         const apiKey = document.getElementById('api-key').value.trim();
         if (!apiKey) return;
@@ -132,6 +150,16 @@
 
         let fullTranslation = "";
 
+        // GPT 프롬프트에 PDF 문맥 추가
+        const systemPrompt = `You are a professional interpreter. 
+        [Context from Textbook]: ${pdfContext || "No textbook uploaded."}
+        
+        [Task]:
+        1. The input is Korean speech (STT). It might have phonetic errors.
+        2. Refer to the [Context from Textbook] to correct any misrecognized technical terms or keywords.
+        3. Translate the corrected meaning into natural spoken English.
+        4. Output ONLY the English translation.`;
+
         try {
             const response = await fetch("https://api.openai.com/v1/chat/completions", {
                 method: "POST",
@@ -139,7 +167,7 @@
                 body: JSON.stringify({
                     model: "gpt-4o-mini",
                     messages: [
-                        { role: "system", content: "Context-aware interpreter. Repair STT errors. Natural spoken English. ONLY output translation." },
+                        { role: "system", content: systemPrompt },
                         { role: "user", content: text }
                     ],
                     stream: true,
@@ -178,31 +206,14 @@
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.voice = synth.getVoices().find(v => v.name === document.getElementById('voice-select').value);
         utterance.rate = 1.1;
-        // 음성 출력이 끝날 때 마이크 상태를 다시 한번 강제 체크
-        utterance.onend = () => { if(isRunning) forceRestartMic(); };
         synth.speak(utterance);
     }
 
-    // [마이크 강제 재시작 와치독]
-    function forceRestartMic() {
-        if (!isRunning) return;
-        try {
-            recognition.stop(); // 일단 정지시킨 후 onend에서 자동으로 다시 켜짐
-        } catch(e) {
-            try { recognition.start(); } catch(e2) {}
-        }
-    }
-
-    // 마이크가 살아있는지 2초마다 체크하는 와치독
+    // [마이크 와치독] 5초간 반응 없으면 재시작
     setInterval(() => {
-        if (isRunning) {
-            const now = Date.now();
-            // 5초 동안 아무런 인식 결과(중간 결과 포함)가 없으면 마이크를 의심하고 재시작
-            if (now - lastResultTime > 5000) {
-                console.log("마이크 무반응 감지 - 강제 재설정");
-                forceRestartMic();
-                lastResultTime = now; // 타이머 리셋
-            }
+        if (isRunning && (Date.now() - lastResultTime > 5000)) {
+            try { recognition.stop(); } catch(e) {}
+            lastResultTime = Date.now();
         }
     }, 2000);
 
