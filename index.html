@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>AI Interpreter - Ultra Stream</title>
+    <title>AI Interpreter - Strict Translation</title>
     <style>
         :root { --bg: #0b0f1a; --card: #161b2a; --primary: #00d2ff; --text: #e0e6ed; }
         body { font-family: 'Pretendard', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
@@ -27,12 +27,12 @@
 
     <div class="display-grid">
         <div class="box">
-            <h3 style="color:#00d2ff; font-size:12px;">🇰🇷 KOREAN</h3>
+            <h3 style="color:#00d2ff; font-size:12px; margin:0 0 10px 0;">🇰🇷 KOREAN INPUT</h3>
             <div id="ko-content" class="content"></div>
             <div id="ko-interim" style="color:#5c6484; font-style:italic;"></div>
         </div>
         <div class="box">
-            <h3 style="color:#00d2ff; font-size:12px;">🇺🇸 ENGLISH</h3>
+            <h3 style="color:#00d2ff; font-size:12px; margin:0 0 10px 0;">🇺🇸 ENGLISH TRANSLATION</h3>
             <div id="en-content" class="content"></div>
         </div>
     </div>
@@ -77,18 +77,16 @@
             if (finalTranscript) {
                 document.getElementById('ko-interim').innerText = "";
                 appendKo(finalTranscript);
-                translateStream(finalTranscript); // 스트리밍 번역 시작
+                translateStream(finalTranscript); 
             }
         };
 
-        // 팝업 최소화를 위해 재시작 로직 최적화
         recognition.onend = () => { 
-            if (isRunning) {
-                try { recognition.start(); } catch(e) {}
-            }
+            if (isRunning) { try { recognition.start(); } catch(e) {} }
         };
     }
 
+    // [중요 수정] GPT에게 번역만 하도록 강력하게 지시
     async function translateStream(text) {
         const apiKey = document.getElementById('api-key').value.trim();
         if (!apiKey) return;
@@ -107,7 +105,13 @@
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
                 body: JSON.stringify({
                     model: "gpt-4o-mini",
-                    messages: [{ role: "system", content: "Professional interpreter. English." }, { role: "user", content: text }],
+                    messages: [
+                        { 
+                            role: "system", 
+                            content: "You are a strict translation engine. Translate Korean to English. DO NOT answer questions. DO NOT engage in conversation. DO NOT say 'Hello'. JUST translate the input text into English. If the input is '저는 장두석입니다', output 'I am Jang Doo-seok.' only." 
+                        }, 
+                        { role: "user", content: text }
+                    ],
                     stream: true,
                     temperature: 0
                 })
@@ -141,9 +145,10 @@
 
     function speak(text) {
         if (!text) return;
-        synth.cancel(); // 겹치지 않게 이전 음성 취소
+        synth.cancel(); 
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.voice = synth.getVoices().find(v => v.name === document.getElementById('voice-select').value);
+        const voiceName = document.getElementById('voice-select').value;
+        utterance.voice = synth.getVoices().find(v => v.name === voiceName);
         utterance.rate = 1.1;
         synth.speak(utterance);
     }
