@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Interpreter - Ultra Stream</title>
+    <style>
+        :root { --bg: #0b0f1a; --card: #161b2a; --primary: #00d2ff; --text: #e0e6ed; }
+        body { font-family: 'Pretendard', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 1100px; }
+        .config-panel { background: var(--card); padding: 12px; border-radius: 12px; margin-bottom: 15px; display: flex; gap: 10px; border: 1px solid #2d334a; }
+        input, select { background: #0b0f1a; border: 1px solid #2d334a; color: white; padding: 10px; border-radius: 8px; }
+        .display-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .box { background: var(--card); border-radius: 16px; padding: 20px; height: 550px; display: flex; flex-direction: column; border: 1px solid #2d334a; }
+        .content { flex: 1; overflow-y: auto; font-size: 1.3rem; line-height: 1.6; }
+        .streaming-text { color: #00d2ff; font-weight: bold; border-left: 3px solid #00d2ff; padding-left: 10px; margin-bottom: 20px; }
+        .btn-start { background: #00d2ff; color: #0b0f1a; width: 100%; padding: 18px; border-radius: 12px; border: none; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .btn-stop { background: #ff4b5c; color: white; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="config-panel">
+        <input type="password" id="api-key" placeholder="OpenAI API Key (sk-...)">
+        <select id="voice-select"></select>
+    </div>
+
+    <div class="display-grid">
+        <div class="box">
+            <h3 style="color:#00d2ff; font-size:12px;">🇰🇷 KOREAN</h3>
+            <div id="ko-content" class="content"></div>
+            <div id="ko-interim" style="color:#5c6484; font-style:italic;"></div>
+        </div>
+        <div class="box">
+            <h3 style="color:#00d2ff; font-size:12px;">🇺🇸 ENGLISH</h3>
+            <div id="en-content" class="content"></div>
+        </div>
+    </div>
+
+    <button id="main-btn" class="btn-start" onclick="toggleSystem()">통역 시스템 시작</button>
+</div>
+
+<script>
+    let recognition;
+    let isRunning = false;
+    const synth = window.speechSynthesis;
+
+    function loadVoices() {
+        const voices = synth.getVoices().filter(v => v.lang.includes('en'));
+        const select = document.getElementById('voice-select');
+        select.innerHTML = voices.map(v => `<option value="${v.name}">${v.name}</option>`).join('');
+    }
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
+
+    const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'ko-KR';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        recognition.onresult = async (event) => {
+            let interimTranscript = '';
+            let finalTranscript = '';
+
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript = event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+
+            document.getElementById('ko-interim').innerText = interimTranscript;
+
+            if (finalTranscript) {
+                document.getElementById('ko-interim').innerText = "";
+                appendKo(finalTranscript);
+                translateStream(finalTranscript); // 스트리밍 번역 시작
+            }
+        };
+
+        // 팝업 최소화를 위해 재시작 로직 최적화
+        recognition.onend = () => { 
+            if (isRunning) {
+                try { recognition.start(); } catch(e) {}
+            }
+        };
+    }
+
+    async function translateStream(text) {
+        const apiKey = document.getElementById('api-key').value.trim();
+        if (!apiKey) return;
+
+        const enContent = document.getElementById('en-content');
+        const currentEnDiv = document.createElement('div');
+        currentEnDiv.className = "streaming-text";
+        enContent.appendChild(currentEnDiv);
+        enContent.scrollTop = enContent.scrollHeight;
+
+        let fullTranslation = "";
+
+        try {
+            const response = await fetch("https://api.openai.com/v1/chat/completions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: "gpt-4o-mini",
+                    messages: [{ role: "system", content: "Professional interpreter. English." }, { role: "user", content: text }],
+                    stream: true,
+                    temperature: 0
+                })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value);
+                const lines = chunk.split("\n");
+                for (const line of lines) {
+                    if (line.startsWith("data: ") && line !== "data: [DONE]") {
+                        try {
+                            const payload = JSON.parse(line.substring(6));
+                            const content = payload.choices[0].delta.content;
+                            if (content) {
+                                fullTranslation += content;
+                                currentEnDiv.innerText = "→ " + fullTranslation;
+                                enContent.scrollTop = enContent.scrollHeight;
+                            }
+                        } catch(e) {}
+                    }
+                }
+            }
+            speak(fullTranslation);
+        } catch (error) {}
+    }
+
+    function speak(text) {
+        if (!text) return;
+        synth.cancel(); // 겹치지 않게 이전 음성 취소
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.voice = synth.getVoices().find(v => v.name === document.getElementById('voice-select').value);
+        utterance.rate = 1.1;
+        synth.speak(utterance);
+    }
+
+    function appendKo(text) {
+        const container = document.getElementById('ko-content');
+        const div = document.createElement('div');
+        div.style.marginBottom = "20px";
+        div.innerText = "• " + text;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function toggleSystem() {
+        const btn = document.getElementById('main-btn');
+        if (!isRunning) {
+            isRunning = true;
+            recognition.start();
+            btn.innerText = "통역 시스템 중지";
+            btn.className = "btn-start btn-stop";
+        } else {
+            isRunning = false;
+            recognition.stop();
+            synth.cancel();
+            btn.innerText = "통역 시스템 시작";
+            btn.className = "btn-start";
+        }
+    }
+</script>
+</body>
+</html>
